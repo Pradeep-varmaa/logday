@@ -89,9 +89,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (typeof document !== 'undefined') {
       if (theme === 'light') {
         document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+        document.documentElement.setAttribute('data-theme', 'light');
       } else {
         document.documentElement.classList.remove('light');
+        document.documentElement.classList.add('dark');
+        document.documentElement.setAttribute('data-theme', 'dark');
       }
+      try {
+        localStorage.setItem('daylog_theme', theme);
+      } catch (_) {}
     }
     set({ theme });
   },

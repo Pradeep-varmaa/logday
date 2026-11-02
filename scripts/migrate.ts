@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { neon } from '@neondatabase/serverless';
+import { Pool } from '@neondatabase/serverless';
 
 // Load .env.local or .env if process.env.DATABASE_URL is not set
 function loadEnv() {
@@ -38,7 +38,8 @@ async function runMigration() {
   }
 
   console.log('🚀 Connecting to Neon PostgreSQL...');
-  const sql = neon(databaseUrl);
+  const pool = new Pool({ connectionString: databaseUrl });
+  const client = await pool.connect();
 
   const files = [
     '01_tables.sql',
@@ -58,16 +59,19 @@ async function runMigration() {
 
     const startTime = Date.now();
     try {
-      // Execute the entire SQL script
-      await (sql as any)(sqlContent);
+      await client.query(sqlContent);
       const elapsed = Date.now() - startTime;
       console.log(`✅ Successfully applied /db/${filename} (${elapsed}ms)`);
     } catch (err: any) {
       console.error(`❌ Migration failed on ${filename}:`, err.message || err);
+      client.release();
+      await pool.end();
       process.exit(1);
     }
   }
 
+  client.release();
+  await pool.end();
   console.log('\n🎉 All DayLog migrations and seed scripts finished successfully!\n');
 }
 

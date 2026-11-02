@@ -10,6 +10,8 @@ import {
   Bell,
   Sun,
   Moon,
+  Volume2,
+  VolumeX,
   Download,
   Upload,
   LogOut,
@@ -20,6 +22,13 @@ import {
   X,
   Sparkles,
 } from 'lucide-react';
+import {
+  isSoundEnabled,
+  setSoundEnabled,
+  playCheckPop,
+  playCompleteFanfare,
+  playVoiceCue,
+} from '@/lib/audio/sound';
 
 const ICON_OPTIONS = [
   'CheckCircle', 'Footprints', 'Flame', 'Droplet', 'Moon', 'Code',
@@ -28,12 +37,20 @@ const ICON_OPTIONS = [
 
 export default function SettingsPage() {
   const { theme, toggleTheme } = useAppStore();
+  const [soundActive, setSoundActive] = useState<boolean>(() => isSoundEnabled());
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [notificationStatus, setNotificationStatus] = useState<string>('default');
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleToggleSound = () => {
+    const next = !soundActive;
+    setSoundActive(next);
+    setSoundEnabled(next);
+    if (next) playCheckPop();
+  };
 
   // New activity form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -415,31 +432,93 @@ export default function SettingsPage() {
       {/* Section 3: Theme */}
       <div className="glass-panel rounded-3xl p-5 border border-white/5 space-y-3 shadow-glass">
         <h3 className="text-sm font-bold text-slate-200">UI Theme</h3>
-        <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-900/60 border border-slate-800">
-          <span className="text-xs text-slate-300">
-            Current mode: <strong className="text-white capitalize">{theme}</strong>
-          </span>
+        <p className="text-xs text-slate-400">
+          Choose your interface style. Changes take effect instantly and persist across sessions.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => useAppStore.getState().setTheme('dark')}
+            className={`flex items-center justify-center gap-2 p-3.5 rounded-2xl border transition-all cursor-pointer ${
+              theme === 'dark'
+                ? 'bg-royal-600/20 border-cyan-400/60 shadow-glow-cyan text-white font-bold'
+                : 'bg-navy-950/40 border-white/5 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Moon className="w-4 h-4 text-cyan-400" />
+            <div className="text-left">
+              <div className="text-xs font-bold">Dark Mode</div>
+              <div className="text-[10px] text-slate-400">Deep Navy &amp; Glow</div>
+            </div>
+          </button>
 
           <button
-            onClick={toggleTheme}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-white transition-colors cursor-pointer"
+            type="button"
+            onClick={() => useAppStore.getState().setTheme('light')}
+            className={`flex items-center justify-center gap-2 p-3.5 rounded-2xl border transition-all cursor-pointer ${
+              theme === 'light'
+                ? 'bg-royal-600/20 border-cyan-400/60 shadow-glow-cyan text-white font-bold'
+                : 'bg-navy-950/40 border-white/5 text-slate-400 hover:text-slate-200'
+            }`}
           >
-            {theme === 'dark' ? (
-              <>
-                <Sun className="w-3.5 h-3.5 text-amber-300" />
-                <span>Switch to Light</span>
-              </>
-            ) : (
-              <>
-                <Moon className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Switch to Dark</span>
-              </>
-            )}
+            <Sun className="w-4 h-4 text-amber-400" />
+            <div className="text-left">
+              <div className="text-xs font-bold">Light Mode</div>
+              <div className="text-[10px] text-slate-400">Crisp Slate &amp; Blue</div>
+            </div>
           </button>
         </div>
       </div>
 
-      {/* Section 4: JSON Backup Export & Import */}
+      {/* Section 4: Sound, Audio Cues & Haptics */}
+      <div className="glass-panel rounded-3xl p-5 border border-white/5 space-y-3.5 shadow-glass">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-slate-200">Audio Feedback &amp; Voice Cues</h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Tactile audio chimes, celebratory fanfares, and hands-free workout voice prompts.
+            </p>
+          </div>
+
+          <button
+            onClick={handleToggleSound}
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
+              soundActive
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-glow-cyan'
+                : 'bg-slate-800 text-slate-500 border border-slate-700'
+            }`}
+            title={soundActive ? 'Sound is Enabled' : 'Sound is Muted'}
+          >
+            {soundActive ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <button
+            type="button"
+            onClick={() => {
+              playCheckPop();
+              setTimeout(() => playCompleteFanfare(), 250);
+            }}
+            disabled={!soundActive}
+            className="py-2 px-3 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <span>Test Chimes</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => playVoiceCue('Voice cues ready. Halfway mark reached!')}
+            disabled={!soundActive}
+            className="py-2 px-3 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <span>Test Voice Cue</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Section 5: JSON Backup Export & Import */}
       <div className="glass-panel rounded-3xl p-5 border border-white/5 space-y-3 shadow-glass">
         <h3 className="text-sm font-bold text-slate-200">Data Backup &amp; Portability</h3>
         <p className="text-xs text-slate-400">

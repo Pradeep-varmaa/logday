@@ -5,6 +5,8 @@ import {
   DashboardData,
   MonthAnalyticsData,
   YearAnalyticsData,
+  TodoItem,
+  TodoPriority,
 } from '@/types/activity';
 
 /**
@@ -178,6 +180,7 @@ export async function dbExportAll(): Promise<any> {
   const logs = await sql`SELECT * FROM activity_logs ORDER BY log_date DESC`;
   const summary = await sql`SELECT * FROM daily_summary ORDER BY log_date DESC`;
   const settings = await sql`SELECT * FROM app_settings`;
+  const todos = await sql`SELECT * FROM todos ORDER BY created_at DESC`;
 
   return {
     version: '1.0',
@@ -186,13 +189,14 @@ export async function dbExportAll(): Promise<any> {
     logs,
     summary,
     settings,
+    todos,
   };
 }
 
 /**
  * Full database JSON import directly into Postgres tables
  */
-export async function dbImportAll(data: any): Promise<{ importedActivities: number; importedLogs: number }> {
+export async function dbImportAll(data: any): Promise<{ importedActivities: number; importedLogs: number; importedTodos?: number }> {
   if (!data || !Array.isArray(data.activities)) {
     throw new Error('Invalid backup schema format');
   }
@@ -200,6 +204,7 @@ export async function dbImportAll(data: any): Promise<{ importedActivities: numb
   const sql = getDb();
   let countActivities = 0;
   let countLogs = 0;
+  let countTodos = 0;
 
   for (const a of data.activities) {
     await sql`
@@ -233,5 +238,142 @@ export async function dbImportAll(data: any): Promise<{ importedActivities: numb
     }
   }
 
-  return { importedActivities: countActivities, importedLogs: countLogs };
+  if (Array.isArray(data.todos)) {
+    for (const t of data.todos) {
+      await sql`
+        INSERT INTO todos (id, title, is_completed, priority, completed_at, created_at)
+        VALUES (${t.id}::uuid, ${t.title}, ${t.is_completed}, ${t.priority || 'medium'}, ${t.completed_at ? t.completed_at : null}, ${t.created_at ? t.created_at : new Date().toISOString()})
+        ON CONFLICT (id) DO UPDATE SET
+          title = EXCLUDED.title,
+          is_completed = EXCLUDED.is_completed,
+          priority = EXCLUDED.priority,
+          completed_at = EXCLUDED.completed_at
+      `;
+      countTodos++;
+    }
+  }
+
+  return { importedActivities: countActivities, importedLogs: countLogs, importedTodos: countTodos };
+}
+
+/**
+ * Fetch todos. If onlyIncomplete is true, only returns tasks that are NOT completed.
+ * Notice: incomplete tasks persist continuously without a single-day timeline until checked!
+ */
+export async function dbGetTodos(onlyIncomplete: boolean = false): Promise<TodoItem[]> {
+  const sql = getDb();
+  const rows = onlyIncomplete
+    ? await sql`
+        SELECT id, title, is_completed, priority, completed_at, created_at, updated_at
+        FROM todos
+        WHERE is_completed = FALSE
+        ORDER BY 
+          CASE priority
+            WHEN 'high' THEN 1
+            WHEN 'medium' THEN 2
+            WHEN 'low' THEN 3
+            ELSE 4
+          END,
+          created_at DESC
+      `
+    : await sql`
+        SELECT id, title, is_completed, priority, completed_at, created_at, updated_at
+        FROM todos
+        ORDER BY 
+          is_completed ASC,
+          CASE priority
+            WHEN 'high' THEN 1
+            WHEN 'medium' THEN 2
+            WHEN 'low' THEN 3
+            ELSE 4
+          END,
+          created_at DESC
+      `;
+
+  return rows.map((r: any) => ({
+    id: r.id,
+    title: r.title,
+    is_completed: Boolean(r.is_completed),
+    priority: r.priority as TodoPriority,
+    completed_at: r.completed_at,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  }));
+}
+
+/**
+ * Create a new persistent to-do item
+ */
+export async function dbCreateTodo(title: string, priority: TodoPriority = 'medium'): Promise<TodoItem> {
+  const sql = getDb();
+  const rows = await sql`
+    INSERT INTO todos (title, priority, is_completed)
+    VALUES (${title.trim()}, ${priority}, FALSE)
+    RETURNING id, title, is_completed, priority, completed_at, created_at, updated_at
+  `;
+
+  const r = rows[0];
+  return {
+    id: r.id,
+    title: r.title,
+    is_completed: Boolean(r.is_completed),
+    priority: r.priority as TodoPriority,
+    completed_at: r.completed_at,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  };
+}
+
+/**
+ * Toggle or update completion status of a todo item
+ */
+export async function dbToggleTodo(id: string, is_completed: boolean): Promise<TodoItem> {
+  const sql = getDb();
+  const completedAt = is_completed ? new Date().toISOString() : null;
+
+  const rows = await sql`
+    UPDATE todos
+    SET is_completed = ${is_completed},
+        completed_at = ${completedAt}
+    WHERE id = ${id}::uuid
+    RETURNING id, title, is_completed, priority, completed_at, created_at, updated_at
+  `;
+
+  if (!rows || rows.length === 0) {
+    throw new Error(`Todo with id ${id} not found`);
+  }
+
+  const r = rows[0];
+  return {
+    id: r.id,
+    title: r.title,
+    is_completed: Boolean(r.is_completed),
+    priority: r.priority as TodoPriority,
+    completed_at: r.completed_at,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  };
+}
+
+/**
+ * Delete a specific todo item
+ */
+export async function dbDeleteTodo(id: string): Promise<boolean> {
+  const sql = getDb();
+  await sql`DELETE FROM todos WHERE id = ${id}::uuid`;
+  return true;
+}
+
+/**
+ * Clear all completed todo items
+ */
+export async function dbClearCompletedTodos(): Promise<number> {
+  const sql = getDb();
+  const rows = await sql`
+    WITH deleted AS (
+      DELETE FROM todos WHERE is_completed = TRUE RETURNING id
+    )
+    SELECT count(*)::int as count FROM deleted
+  `;
+  return rows[0]?.count || 0;
 }

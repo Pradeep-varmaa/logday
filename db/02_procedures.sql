@@ -446,25 +446,38 @@ BEGIN
   WITH days_in_month AS (
     SELECT COUNT(*)::NUMERIC AS total_days
     FROM generate_series(v_start_date, v_end_date, INTERVAL '1 day')
+  ),
+  activity_month_stats AS (
+    SELECT
+      a.id AS activity_id,
+      a.name,
+      a.icon,
+      a.unit,
+      a.daily_target AS target,
+      a.sort_order,
+      COUNT(CASE WHEN l.is_completed = TRUE THEN 1 END) AS completed_days,
+      COALESCE(SUM(l.value), 0) AS total_logged,
+      ROUND((COUNT(CASE WHEN l.is_completed = TRUE THEN 1 END)::NUMERIC / (SELECT total_days FROM days_in_month)) * 100.0, 1) AS completion_rate
+    FROM activities a
+    LEFT JOIN activity_logs l ON l.activity_id = a.id AND l.log_date BETWEEN v_start_date AND v_end_date
+    WHERE a.is_active = TRUE
+    GROUP BY a.id, a.name, a.icon, a.unit, a.daily_target, a.sort_order
   )
   SELECT COALESCE(
     jsonb_agg(
       jsonb_build_object(
-        'activity_id', a.id,
-        'name', a.name,
-        'icon', a.icon,
-        'unit', a.unit,
-        'target', a.daily_target,
-        'completed_days', COUNT(CASE WHEN l.is_completed = TRUE THEN 1 END),
-        'total_logged', COALESCE(SUM(l.value), 0),
-        'completion_rate', ROUND((COUNT(CASE WHEN l.is_completed = TRUE THEN 1 END)::NUMERIC / (SELECT total_days FROM days_in_month)) * 100.0, 1)
-      ) ORDER BY a.sort_order ASC
+        'activity_id', s.activity_id,
+        'name', s.name,
+        'icon', s.icon,
+        'unit', s.unit,
+        'target', s.target,
+        'completed_days', s.completed_days,
+        'total_logged', s.total_logged,
+        'completion_rate', s.completion_rate
+      ) ORDER BY s.sort_order ASC
     ), '[]'::jsonb
   ) INTO v_activity_rates
-  FROM activities a
-  LEFT JOIN activity_logs l ON l.activity_id = a.id AND l.log_date BETWEEN v_start_date AND v_end_date
-  WHERE a.is_active = TRUE
-  GROUP BY a.id, a.name, a.icon, a.unit, a.daily_target, a.sort_order;
+  FROM activity_month_stats s;
 
   -- 4. Best day and weakest day
   SELECT jsonb_build_object('date', log_date, 'completion_pct', completion_pct)
@@ -588,22 +601,32 @@ BEGIN
       MAKE_DATE(p_year, m.m, 1) AS m_start,
       (MAKE_DATE(p_year, m.m, 1) + INTERVAL '1 month - 1 day')::DATE AS m_end
     FROM months m
+  ),
+  month_aggs AS (
+    SELECT
+      mm.m,
+      mm.month_name,
+      COALESCE(ROUND(AVG(s.completion_pct), 1), 0) AS avg_completion_pct,
+      COALESCE(SUM(s.steps_total), 0) AS total_steps,
+      COUNT(CASE WHEN s.completion_pct > 0 THEN 1 END) AS active_days,
+      COUNT(CASE WHEN s.is_streak_day = TRUE THEN 1 END) AS streak_days
+    FROM month_metrics mm
+    LEFT JOIN daily_summary s ON s.log_date BETWEEN mm.m_start AND mm.m_end
+    GROUP BY mm.m, mm.month_name
   )
   SELECT COALESCE(
     jsonb_agg(
       jsonb_build_object(
-        'month', mm.m,
-        'month_name', mm.month_name,
-        'avg_completion_pct', COALESCE(ROUND(AVG(s.completion_pct), 1), 0),
-        'total_steps', COALESCE(SUM(s.steps_total), 0),
-        'active_days', COUNT(CASE WHEN s.completion_pct > 0 THEN 1 END),
-        'streak_days', COUNT(CASE WHEN s.is_streak_day = TRUE THEN 1 END)
-      ) ORDER BY mm.m ASC
+        'month', ma.m,
+        'month_name', ma.month_name,
+        'avg_completion_pct', ma.avg_completion_pct,
+        'total_steps', ma.total_steps,
+        'active_days', ma.active_days,
+        'streak_days', ma.streak_days
+      ) ORDER BY ma.m ASC
     ), '[]'::jsonb
   ) INTO v_months_series
-  FROM month_metrics mm
-  LEFT JOIN daily_summary s ON s.log_date BETWEEN mm.m_start AND mm.m_end
-  GROUP BY mm.m, mm.month_name;
+  FROM month_aggs ma;
 
   -- 2. Total active days & aggregate metrics
   SELECT
@@ -656,23 +679,35 @@ BEGIN
    LIMIT 1;
 
   -- 5. Per-activity yearly completion rate
+  WITH yearly_aggs AS (
+    SELECT
+      a.id AS activity_id,
+      a.name,
+      a.icon,
+      a.unit,
+      a.sort_order,
+      COUNT(CASE WHEN l.is_completed = TRUE THEN 1 END) AS completed_days,
+      COALESCE(SUM(l.value), 0) AS total_logged,
+      ROUND((COUNT(CASE WHEN l.is_completed = TRUE THEN 1 END)::NUMERIC / 365.0) * 100.0, 1) AS completion_rate
+    FROM activities a
+    LEFT JOIN activity_logs l ON l.activity_id = a.id AND l.log_date BETWEEN v_start_date AND v_end_date
+    WHERE a.is_active = TRUE
+    GROUP BY a.id, a.name, a.icon, a.unit, a.sort_order
+  )
   SELECT COALESCE(
     jsonb_agg(
       jsonb_build_object(
-        'activity_id', a.id,
-        'name', a.name,
-        'icon', a.icon,
-        'unit', a.unit,
-        'completed_days', COUNT(CASE WHEN l.is_completed = TRUE THEN 1 END),
-        'total_logged', COALESCE(SUM(l.value), 0),
-        'completion_rate', ROUND((COUNT(CASE WHEN l.is_completed = TRUE THEN 1 END)::NUMERIC / 365.0) * 100.0, 1)
-      ) ORDER BY a.sort_order ASC
+        'activity_id', ya.activity_id,
+        'name', ya.name,
+        'icon', ya.icon,
+        'unit', ya.unit,
+        'completed_days', ya.completed_days,
+        'total_logged', ya.total_logged,
+        'completion_rate', ya.completion_rate
+      ) ORDER BY ya.sort_order ASC
     ), '[]'::jsonb
   ) INTO v_yearly_activity_rates
-  FROM activities a
-  LEFT JOIN activity_logs l ON l.activity_id = a.id AND l.log_date BETWEEN v_start_date AND v_end_date
-  WHERE a.is_active = TRUE
-  GROUP BY a.id, a.name, a.icon, a.unit, a.sort_order;
+  FROM yearly_aggs ya;
 
   -- 6. Full year 365-day heatmap
   WITH year_days AS (

@@ -8,6 +8,7 @@ import { DesktopSidebar } from './DesktopSidebar';
 import { ConfettiBurst } from '@/components/ui/ConfettiBurst';
 import { TopProgressBar } from './TopProgressBar';
 import { initSyncListeners } from '@/lib/storage/sync';
+import { useAppStore } from '@/store/useAppStore';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -16,6 +17,16 @@ interface AppLayoutProps {
 export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const pathname = usePathname();
   const isLoginPage = pathname === '/login';
+  const setTheme = useAppStore((state) => state.setTheme);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('daylog_theme') as 'dark' | 'light' | null;
+      if (saved) {
+        setTheme(saved);
+      }
+    } catch (_) {}
+  }, [setTheme]);
 
   useEffect(() => {
     const cleanup = initSyncListeners();
@@ -24,7 +35,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   if (isLoginPage) {
     return (
-      <main className="min-h-screen flex items-center justify-center p-4 bg-navy-950">
+      <main className="min-h-screen flex items-center justify-center p-4 app-container">
         <Suspense fallback={null}>
           <TopProgressBar />
         </Suspense>
@@ -34,7 +45,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   }
 
   return (
-    <div className="min-h-screen flex bg-navy-950 text-slate-100 antialiased selection:bg-cyan-500/20 selection:text-cyan-200">
+    <div className="min-h-screen flex app-container antialiased selection:bg-cyan-500/20 selection:text-cyan-200">
       <Suspense fallback={null}>
         <TopProgressBar />
       </Suspense>

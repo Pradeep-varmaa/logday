@@ -8,10 +8,16 @@ import { StreakCard } from '@/components/ui/StreakCard';
 import { ActivityCard } from '@/components/dashboard/ActivityCard';
 import { WeeklyStepsBar } from '@/components/dashboard/WeeklyStepsBar';
 import { MonthHeatmap } from '@/components/dashboard/MonthHeatmap';
+import { DashboardTodosWidget } from '@/components/dashboard/DashboardTodosWidget';
+import { MorningFocusBriefing } from '@/components/dashboard/MorningFocusBriefing';
+import { ChallengeSprintBanner } from '@/components/dashboard/ChallengeSprintBanner';
+import { DailyMoodWidget } from '@/components/dashboard/DailyMoodWidget';
+import { LifeStatsCard } from '@/components/dashboard/LifeStatsCard';
 import { WorkoutTimerModal } from '@/components/today/WorkoutTimerModal';
 import { StepCounterModal } from '@/components/today/StepCounterModal';
 import { LogDetailModal } from '@/components/today/LogDetailModal';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
+import { updateAppBadge } from '@/lib/pwa/badging';
 import DashboardLoading from './loading';
 import { Sparkles, Calendar, PlusCircle } from 'lucide-react';
 
@@ -40,6 +46,8 @@ export default function DashboardPage() {
         setError(json.error || 'Failed to load database records');
       } else {
         setData(json);
+        const pendingCount = (json.activities || []).filter((a: any) => !a.is_completed).length;
+        updateAppBadge(pendingCount);
       }
     } catch (err: any) {
       console.error('Error fetching dashboard:', err);
@@ -87,6 +95,15 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <InstallPrompt />
 
+      {/* Morning Focus Briefing (if planned yesterday) */}
+      <MorningFocusBriefing currentDate={selectedDate} />
+
+      {/* 30-Day Monthly Challenge Sprint Banner */}
+      <ChallengeSprintBanner
+        currentDate={selectedDate}
+        monthHeatmap={data.month_heatmap}
+      />
+
       {/* Hero Card: Today's Completion Status */}
       <div className="glass-panel rounded-3xl p-6 relative overflow-hidden border border-white/5 bg-gradient-to-br from-royal-950/40 via-navy-900/60 to-cyan-950/20 shadow-glass">
         <div className="flex items-center justify-between gap-4">
@@ -119,8 +136,23 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Gaps-and-Islands Streak Card */}
-      <StreakCard streaks={data.streaks} />
+      {/* Gaps-and-Islands Streak Card with Streak Shield */}
+      <StreakCard
+        streaks={data.streaks}
+        currentDate={selectedDate}
+        onRefresh={fetchDashboard}
+      />
+
+      {/* Persistent Open Tasks (no timeline; remains until completed) */}
+      <DashboardTodosWidget />
+
+      {/* Daily Check-in & Micro-Journal */}
+      <DailyMoodWidget
+        date={selectedDate}
+        initialMood={data.summary?.mood}
+        initialReflection={data.summary?.reflection}
+        onSaved={fetchDashboard}
+      />
 
       {/* Activities Grid */}
       <div className="space-y-3">
@@ -155,6 +187,9 @@ export default function DashboardPage() {
       {data.month_heatmap && data.month_heatmap.length > 0 && (
         <MonthHeatmap days={data.month_heatmap} currentDate={selectedDate} />
       )}
+
+      {/* Cumulative Lifetime Odometers */}
+      <LifeStatsCard />
 
       {/* Modals */}
       {timerModalActivity && (

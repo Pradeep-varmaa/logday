@@ -40,6 +40,8 @@ export interface DailySummary {
   total_count: number;
   steps_total: number;
   is_streak_day: boolean;
+  mood?: string | null;
+  reflection?: string | null;
   updated_at?: string;
 }
 
@@ -162,6 +164,18 @@ export interface YearAnalyticsData {
   months_series: YearMonthSeriesItem[];
   activity_rates: ActivityRateItem[];
   heatmap_365: YearHeatmapDay[];
+}
+
+export type TodoPriority = 'low' | 'medium' | 'high';
+
+export interface TodoItem {
+  id: string;
+  title: string;
+  is_completed: boolean;
+  priority: TodoPriority;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at?: string;
 }
 
 // Outbox item for offline synchronization

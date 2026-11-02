@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS activities (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
+                        
 -- Trigger for activities updated_at
 DROP TRIGGER IF EXISTS set_timestamp_activities ON activities;
 CREATE TRIGGER set_timestamp_activities
@@ -78,8 +78,14 @@ CREATE TABLE IF NOT EXISTS daily_summary (
   total_count INT NOT NULL DEFAULT 0 CHECK (total_count >= 0),
   steps_total NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (steps_total >= 0),
   is_streak_day BOOLEAN NOT NULL DEFAULT FALSE,
+  mood VARCHAR(30) NULL,
+  reflection TEXT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Idempotent column additions for existing installations
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS mood VARCHAR(30) NULL;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS reflection TEXT NULL;
 
 -- Trigger for daily_summary updated_at
 DROP TRIGGER IF EXISTS set_timestamp_daily_summary ON daily_summary;
@@ -107,6 +113,27 @@ FOR EACH ROW
 EXECUTE FUNCTION trigger_set_timestamp();
 
 -- ----------------------------------------------------------------------------
+-- Table: todos
+-- Persistent task / to-do list (open-ended without a single-day timeline; stays active until checked)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS todos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title VARCHAR(255) NOT NULL,
+  is_completed BOOLEAN NOT NULL DEFAULT FALSE,
+  priority VARCHAR(20) NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high')),
+  completed_at TIMESTAMPTZ NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Trigger for todos updated_at
+DROP TRIGGER IF EXISTS set_timestamp_todos ON todos;
+CREATE TRIGGER set_timestamp_todos
+BEFORE UPDATE ON todos
+FOR EACH ROW
+EXECUTE FUNCTION trigger_set_timestamp();
+
+-- ----------------------------------------------------------------------------
 -- Indexes for performance
 -- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_activity_logs_date ON activity_logs(log_date);
@@ -114,5 +141,6 @@ CREATE INDEX IF NOT EXISTS idx_activity_logs_activity ON activity_logs(activity_
 CREATE INDEX IF NOT EXISTS idx_activity_logs_activity_date ON activity_logs(activity_id, log_date);
 CREATE INDEX IF NOT EXISTS idx_activities_sort ON activities(is_active, sort_order);
 CREATE INDEX IF NOT EXISTS idx_daily_summary_streak ON daily_summary(is_streak_day, log_date);
+CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(is_completed, created_at DESC);
 
 COMMIT;

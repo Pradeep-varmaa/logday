@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { MonthAnalyticsData } from '@/types/activity';
 import { IconRenderer } from '@/components/ui/IconRenderer';
 import { Skeleton } from '@/components/ui/SkeletonCard';
+import { MonthlyWrappedModal } from './MonthlyWrappedModal';
 import {
   TrendingUp,
   TrendingDown,
@@ -39,6 +40,7 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
   const [data, setData] = useState<MonthAnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showWrapped, setShowWrapped] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -99,56 +101,68 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Month & Year Selectors with Next / Prev */}
-      <div className="flex items-center justify-between glass-panel p-3.5 rounded-2xl border border-white/5">
-        <button
-          onClick={handlePrev}
-          aria-label="Previous month"
-          className="w-9 h-9 rounded-xl flex items-center justify-center bg-slate-800/60 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-
-        <div className="flex items-center gap-2">
-          <select
-            value={month}
-            onChange={(e) => {
-              const m = parseInt(e.target.value, 10);
-              setMonth(m);
-              onDateChange(year, m);
-            }}
-            className="bg-slate-800/90 text-white font-semibold text-sm rounded-xl px-3 py-1.5 border border-slate-700/60 focus:border-cyan-400 focus:outline-none cursor-pointer"
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 glass-panel p-3.5 rounded-2xl border border-white/5">
+        <div className="flex items-center justify-between w-full sm:w-auto gap-2">
+          <button
+            onClick={handlePrev}
+            aria-label="Previous month"
+            className="w-9 h-9 rounded-xl flex items-center justify-center bg-slate-800/60 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
           >
-            {MONTH_NAMES.map((name, i) => (
-              <option key={name} value={i + 1}>
-                {name}
-              </option>
-            ))}
-          </select>
+            <ChevronLeft className="w-5 h-5" />
+          </button>
 
-          <select
-            value={year}
-            onChange={(e) => {
-              const y = parseInt(e.target.value, 10);
-              setYear(y);
-              onDateChange(y, month);
-            }}
-            className="bg-slate-800/90 text-white font-semibold text-sm rounded-xl px-3 py-1.5 border border-slate-700/60 focus:border-cyan-400 focus:outline-none cursor-pointer"
+          <div className="flex items-center gap-2">
+            <select
+              value={month}
+              onChange={(e) => {
+                const m = parseInt(e.target.value, 10);
+                setMonth(m);
+                onDateChange(year, m);
+              }}
+              className="bg-slate-800/90 text-white font-semibold text-sm rounded-xl px-3 py-1.5 border border-slate-700/60 focus:border-cyan-400 focus:outline-none cursor-pointer"
+            >
+              {MONTH_NAMES.map((name, i) => (
+                <option key={name} value={i + 1}>
+                  {name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={year}
+              onChange={(e) => {
+                const y = parseInt(e.target.value, 10);
+                setYear(y);
+                onDateChange(y, month);
+              }}
+              className="bg-slate-800/90 text-white font-semibold text-sm rounded-xl px-3 py-1.5 border border-slate-700/60 focus:border-cyan-400 focus:outline-none cursor-pointer"
+            >
+              {[2024, 2025, 2026, 2027].map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={handleNext}
+            aria-label="Next month"
+            className="w-9 h-9 rounded-xl flex items-center justify-center bg-slate-800/60 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
           >
-            {[2024, 2025, 2026, 2027].map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
+            <ChevronRight className="w-5 h-5" />
+          </button>
         </div>
 
-        <button
-          onClick={handleNext}
-          aria-label="Next month"
-          className="w-9 h-9 rounded-xl flex items-center justify-center bg-slate-800/60 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </button>
+        {data && (
+          <button
+            onClick={() => setShowWrapped(true)}
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-royal-600 via-royal-500 to-cyan-500 hover:from-royal-500 hover:to-cyan-400 text-white shadow-glow-cyan transition-all cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Monthly Wrapped Story</span>
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -341,6 +355,15 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
             </div>
           </div>
         </>
+      )}
+
+      {/* Monthly Wrapped Story Modal */}
+      {data && (
+        <MonthlyWrappedModal
+          isOpen={showWrapped}
+          onClose={() => setShowWrapped(false)}
+          data={data}
+        />
       )}
     </div>
   );

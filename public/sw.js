@@ -6,6 +6,7 @@ const PRECACHE_ASSETS = [
   '/',
   '/dashboard',
   '/today',
+  '/tasks',
   '/calendar',
   '/analytics',
   '/settings',

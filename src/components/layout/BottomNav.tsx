@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/navigation';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, CheckCircle2, Calendar, BarChart3, Settings } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, ListTodo, Calendar, BarChart3, Settings } from 'lucide-react';
 
 interface NavItem {
   label: string;
@@ -14,6 +14,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Today', href: '/today', icon: CheckCircle2 },
+  { label: 'Tasks', href: '/tasks', icon: ListTodo },
   { label: 'Calendar', href: '/calendar', icon: Calendar },
   { label: 'Analytics', href: '/analytics', icon: BarChart3 },
   { label: 'Settings', href: '/settings', icon: Settings },

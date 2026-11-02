@@ -5,7 +5,10 @@ import { ActivityWithLog } from '@/types/activity';
 import { IconRenderer } from '@/components/ui/IconRenderer';
 import { queueLogUpsert } from '@/lib/storage/sync';
 import { useAppStore } from '@/store/useAppStore';
-import { Check, Plus, Timer, MessageSquare, ExternalLink, Sparkles } from 'lucide-react';
+import { playCheckPop, playCompleteFanfare } from '@/lib/audio/sound';
+import { WaterSipModal } from '@/components/today/WaterSipModal';
+import { TomorrowPlanModal } from '@/components/today/TomorrowPlanModal';
+import { Check, Plus, Timer, MessageSquare, ExternalLink, Sparkles, Droplets, CalendarCheck } from 'lucide-react';
 
 interface ActivityCardProps {
   activity: ActivityWithLog;
@@ -26,15 +29,21 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
 }) => {
   const triggerConfetti = useAppStore((state) => state.triggerConfetti);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showWaterModal, setShowWaterModal] = useState(false);
+  const [showPlanModal, setShowPlanModal] = useState(false);
   const isCompleted = activity.is_completed;
   const isSteps = activity.unit.toLowerCase() === 'steps' || activity.name.toLowerCase().includes('step');
+  const isWater = activity.unit.toLowerCase() === 'l' || activity.name.toLowerCase().includes('water');
+  const isPlanTomorrow = activity.name.toLowerCase().includes('plan');
   const isDuration = activity.type === 'duration';
 
   const handleToggleCheck = async () => {
     setIsUpdating(true);
     const nextVal = isCompleted ? 0 : 1;
+    playCheckPop();
     if (nextVal === 1) {
       triggerConfetti();
+      playCompleteFanfare();
     }
     await queueLogUpsert(activity.id, date, nextVal, activity.note, activity.link);
     setIsUpdating(false);
@@ -44,8 +53,10 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
   const handleQuickAdd = async (delta: number) => {
     setIsUpdating(true);
     const nextVal = Math.max(0, (activity.value || 0) + delta);
+    playCheckPop();
     if (!isCompleted && nextVal >= activity.daily_target) {
       triggerConfetti();
+      playCompleteFanfare();
     }
     await queueLogUpsert(activity.id, date, nextVal, activity.note, activity.link);
     setIsUpdating(false);
@@ -111,18 +122,32 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
         {/* Right: Quick Action Buttons */}
         <div className="flex items-center gap-1.5 shrink-0 self-center">
           {activity.type === 'check' && (
-            <button
-              onClick={handleToggleCheck}
-              disabled={isUpdating}
-              aria-label={isCompleted ? 'Mark incomplete' : 'Mark completed'}
-              className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
-                isCompleted
-                  ? 'bg-cyan-400 text-slate-950 shadow-glow-cyan font-bold scale-105'
-                  : 'bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700/60'
-              }`}
-            >
-              <Check className={`w-5 h-5 ${isCompleted ? 'stroke-[3]' : ''}`} />
-            </button>
+            <div className="flex items-center gap-1.5">
+              {isPlanTomorrow && (
+                <button
+                  type="button"
+                  onClick={() => setShowPlanModal(true)}
+                  className="px-2.5 py-2 rounded-xl text-xs font-semibold bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 transition-all cursor-pointer"
+                  title="Plan tomorrow's priority to-dos"
+                >
+                  <CalendarCheck className="w-3.5 h-3.5" />
+                  <span>Plan</span>
+                </button>
+              )}
+
+              <button
+                onClick={handleToggleCheck}
+                disabled={isUpdating}
+                aria-label={isCompleted ? 'Mark incomplete' : 'Mark completed'}
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
+                  isCompleted
+                    ? 'bg-cyan-400 text-slate-950 shadow-glow-cyan font-bold scale-105'
+                    : 'bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700/60'
+                }`}
+              >
+                <Check className={`w-5 h-5 ${isCompleted ? 'stroke-[3]' : ''}`} />
+              </button>
+            </div>
           )}
 
           {activity.type === 'number' && (
@@ -141,6 +166,25 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
                     className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-royal-600 hover:bg-royal-500 text-white shadow-glow-blue transition-all cursor-pointer"
                   >
                     Log
+                  </button>
+                </>
+              ) : isWater ? (
+                <>
+                  <button
+                    onClick={() => handleQuickAdd(activity.unit.toLowerCase() === 'l' ? 0.5 : 500)}
+                    disabled={isUpdating}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 transition-all cursor-pointer"
+                    title="Quick add +500ml"
+                  >
+                    +500ml
+                  </button>
+                  <button
+                    onClick={() => setShowWaterModal(true)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-royal-600 hover:bg-royal-500 text-white shadow-glow-blue transition-all cursor-pointer"
+                    title="Open Hydration Quick-Sip Bottle"
+                  >
+                    <Droplets className="w-3.5 h-3.5" />
+                    <span>Sip</span>
                   </button>
                 </>
               ) : (
@@ -205,6 +249,32 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
             </a>
           )}
         </div>
+      )}
+
+      {/* Water Quick-Sip Bottle Modal */}
+      {showWaterModal && (
+        <WaterSipModal
+          isOpen={true}
+          onClose={() => setShowWaterModal(false)}
+          date={date}
+          activity={activity}
+          onLogged={() => {
+            onRefresh?.();
+          }}
+        />
+      )}
+
+      {/* Tomorrow Plan Modal */}
+      {showPlanModal && (
+        <TomorrowPlanModal
+          isOpen={true}
+          onClose={() => setShowPlanModal(false)}
+          currentDate={date}
+          activityId={activity.id}
+          onSaved={() => {
+            onRefresh?.();
+          }}
+        />
       )}
     </div>
   );
